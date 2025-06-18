@@ -3,7 +3,6 @@ package com.example.number_battleground.service;
 import com.example.number_battleground.controller.CalcController;
 import com.example.number_battleground.entity.SubmissionEntity;
 import com.example.number_battleground.repository.SubmissionRepository;
-import com.example.number_battleground.service.CalcService.SubmissionDTO;
 
 import org.matheclipse.core.eval.ExprEvaluator;
 import org.matheclipse.core.interfaces.IExpr;
