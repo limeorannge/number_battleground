@@ -13,6 +13,8 @@ import java.time.ZoneId;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.io.IOException;
 import java.math.BigDecimal;
 
 @Service
@@ -159,26 +161,44 @@ public class CalcService {
      *     3) 그날 제출된 모든 Submission 목록을 SubmissionDTO 형태로 반환
      */
     public List<SubmissionDTO> submitExpression(String raw) {
-        // 1) 계산 로직(오차율 등) 수행
+        // 1) 계산 로직 수행
         CalcResponse cr = evaluateExpression(raw);
-        String errorRate = cr.getErrorRate();
+        String errorRateStr = cr.getErrorRate();
+        Map<String,Integer> opCounts = cr.getOperatorCounts();
 
-        // 2) 오늘 날짜 기준 Submission 저장
+        // 2) operator 개수 합산
+        int totalOps = opCounts.values().stream().mapToInt(Integer::intValue).sum();
+        double opsPenalty = totalOps * 10;
+
+        // 3) errorRate 문자열 파싱 ("12.34%" → 0.1234)
+        double errValue = 0.0;
+        if (errorRateStr != null && errorRateStr.endsWith("%")) {
+            try {
+                errValue = Double.parseDouble(errorRateStr.replace("%", "")) / 100.0;
+            } catch (NumberFormatException ex) {
+                // 파싱 실패 시 0으로 간주
+            }
+        }
+        double accuracyPenalty = Math.exp(errValue * 10);
+        double totalPenalty = opsPenalty + accuracyPenalty;
+
+        // 4) 오늘 날짜 기준 Submission 저장
         LocalDate todaySeoul = LocalDate.now(ZoneId.of("Asia/Seoul"));
-        Submission sub = new Submission(raw, errorRate, todaySeoul);
+        Submission sub = new Submission(raw, errorRateStr, todaySeoul, totalPenalty);
         synchronized (submissions) {
             submissions.add(sub);
         }
 
-        // 3) 오늘 날짜에 해당하는 저장 목록만 필터링하여 DTO 생성
-        List<SubmissionDTO> todayList = new ArrayList<>();
+        // 5) 오늘 날짜 필터 후 penalty 기준 정렬하여 DTO 생성
+        List<SubmissionDTO> todayList;
         synchronized (submissions) {
-            for (Submission s : submissions) {
-                if (s.getDate().equals(todaySeoul)) {
-                    todayList.add(new SubmissionDTO(s.getExpression(), s.getErrorRate()));
-                }
-            }
+            todayList = submissions.stream()
+                .filter(s -> s.getDate().equals(todaySeoul))
+                .sorted(Comparator.comparingDouble(Submission::getPenalty))
+                .map(s -> new SubmissionDTO(s.getExpression(), s.getErrorRate(), s.getPenalty()))
+                .collect(Collectors.toList());
         }
+
         return todayList;
     }
 
@@ -187,27 +207,34 @@ public class CalcService {
         private final String expression;
         private final String errorRate;
         private final LocalDate date;
+        private final double penalty;
 
-        public Submission(String expression, String errorRate, LocalDate date) {
+        public Submission(String expression, String errorRate, LocalDate date, double penalty) {
             this.expression = expression;
             this.errorRate = errorRate;
             this.date = date;
+            this.penalty = penalty;
         }
         public String getExpression() { return expression; }
         public String getErrorRate()  { return errorRate; }
         public LocalDate getDate()    { return date; }
+        public double getPenalty()    { return penalty; }
     }
 
-    // ────────── 외부 응답용 DTO: 프론트엔드에 보낼 목록 항목 ──────────
+    // ────────── 외부 응답용 DTO ──────────
     public static class SubmissionDTO {
         private final String expression;
         private final String errorRate;
-        public SubmissionDTO(String expression, String errorRate) {
+        private final double penalty;
+
+        public SubmissionDTO(String expression, String errorRate, double penalty) {
             this.expression = expression;
             this.errorRate = errorRate;
+            this.penalty = penalty;
         }
         public String getExpression() { return expression; }
         public String getErrorRate()  { return errorRate; }
+        public double getPenalty()    { return penalty; }
     }
 
     // ────────── 기존 로직(전처리, 연산자 개수 세기, 난수 생성 등) ──────────

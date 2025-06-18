@@ -236,8 +236,9 @@
             // data는 SubmissionDTO 객체 배열: [{expression, errorRate}, ...]
             $("#history-list").empty();
             data.forEach(function (item, index) {
+              const penText = parseFloat(item.penalty).toFixed(2);
               const li = $("<li>").text(
-                (index + 1) + ". " + item.expression + "  — 오차율: " + item.errorRate
+                item.expression + "  — 오차율: " + item.errorRate + " 페널티: " + penText
               );
               $("#history-list").append(li);
             });
