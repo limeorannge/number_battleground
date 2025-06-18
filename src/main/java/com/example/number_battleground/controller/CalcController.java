@@ -23,7 +23,8 @@ public class CalcController {
     @PostMapping("/submit")
     public List<SubmissionDTO> submit(@RequestBody Map<String,String> payload) {
         String expr = payload.get("expression");
-        return calcService.submitExpression(expr);
+        String nickname = payload.get("nickname");
+        return calcService.submitExpression(expr, nickname);
     }
 
     // ────────── 기존 “실시간 계산” 엔드포인트 (/api/calc) ──────────

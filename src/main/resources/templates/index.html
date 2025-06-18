@@ -106,6 +106,14 @@
 
   <!-- 3) 수식 입력란 + 제출 버튼 -->
   <input
+  type="text"
+  id="nickname"
+  name="nickname"
+  placeholder="닉네임을 입력하세요"
+  autocomplete="off"
+  style="margin-bottom: 0.5rem; width:100%; max-width:400px;"
+/>
+  <input
     type="text"
     id="expression"
     name="expression"
@@ -231,35 +239,44 @@
     }
 
     // (E) 제출 버튼 클릭 → /api/submit 호출 → 오늘 제출 목록 갱신
-    function bindSubmitButton() {
-      $("#submit-button").on("click", function () {
-        const raw = $("#expression").val().trim();
-        if (raw === "") {
-          alert("수식을 입력한 후 제출하세요.");
-          return;
+     function bindSubmitButton() {
+    $("#submit-button").on("click", function () {
+      const raw     = $("#expression").val().trim();
+      const nickRaw = $("#nickname").val().trim() || "익명";
+
+      if (raw === "") {
+        alert("수식을 입력한 후 제출하세요.");
+        return;
+      }
+
+      $.ajax({
+        url: "/api/submit",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          expression: raw,
+          nickname:   nickRaw
+        }),
+        success: function (data) {
+          $("#history-list").empty();
+          data.forEach(function (item, index) {
+            const penText = parseFloat(item.penalty).toFixed(2);
+            const li = $("<li>").text(
+              "닉네임: " + item.nickname
+              + ", 수식:" + item.expression
+              + " — 오차율: " + item.errorRate
+              + ", 페널티: " + penText
+              + ", 제출 시간[" + item.submittedAt + "] "
+            );
+            $("#history-list").append(li);
+          });
+        },
+        error: function (xhr) {
+          alert("제출 실패: " + (xhr.responseJSON?.message || "알 수 없는 오류"));
         }
-        $.ajax({
-          url: "/api/submit",
-          method: "POST",
-          contentType: "application/json",
-          data: JSON.stringify({ expression: raw }),
-          success: function (data) {
-            // data는 SubmissionDTO 객체 배열: [{expression, errorRate}, ...]
-            $("#history-list").empty();
-            data.forEach(function (item, index) {
-              const penText = parseFloat(item.penalty).toFixed(2);
-              const li = $("<li>").text(
-                item.expression + "  — 오차율: " + item.errorRate + " 페널티: " + penText
-              );
-              $("#history-list").append(li);
-            });
-          },
-          error: function () {
-            alert("제출 중 오류가 발생했습니다.");
-          },
-        });
       });
-    }
+    });
+  }
 
     // DOM이 준비되면 초기화
     $(function () {

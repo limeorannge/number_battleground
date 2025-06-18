@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,10 +33,11 @@ public class CalcService {
         this.repo = repo;
     }
 
-    public List<SubmissionDTO> submitExpression(String raw) {
+    public List<SubmissionDTO> submitExpression(String raw, String nickname) {
         // 1) 계산 (기존 evaluateExpression에서 expression, errorRate, opCounts 리턴)
         CalcResponse cr = evaluateExpression(raw);
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         // 2) errorRate 파싱 (e.g. "12.34%" → 0.1234)
         double errValue = 0.0;
         String errStr = cr.getErrorRate();
@@ -55,7 +58,7 @@ public class CalcService {
 
         // 5) DB 저장
         SubmissionEntity ent = new SubmissionEntity(
-            raw, errValue, totalOps, totalPenalty, today
+            raw, errValue, totalOps, totalPenalty, today, nickname, now
         );
         repo.save(ent);
 
@@ -66,7 +69,9 @@ public class CalcService {
 
     private SubmissionDTO toDTO(SubmissionEntity e) {
         String pct = String.format("%.2f%%", e.getErrorRate() * 100);
-        return new SubmissionDTO(e.getExpression(), pct, e.getPenalty());
+        String ts  = e.getCreatedAt()
+                        .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        return new SubmissionDTO(e.getExpression(), pct, e.getPenalty(), e.getNickname(), ts);
     }
 
 
@@ -224,15 +229,21 @@ public class CalcService {
         private final String expression;
         private final String errorRate;
         private final double penalty;
-        public SubmissionDTO(String expr, String err, double pen) {
+        private final String nickname;      // 추가
+        private final String submittedAt;   // 추가 (문자열 포맷)
+        public SubmissionDTO(String expr, String err, double pen, String nickname, String submittedAt) {
             this.expression = expr;
             this.errorRate  = err;
             this.penalty    = pen;
+            this.nickname    = nickname;
+            this.submittedAt = submittedAt;
         }
         // getters
         public String getExpression() { return expression; }
         public String getErrorRate()  { return errorRate; }
         public double getPenalty()    { return penalty; }
+        public String getNickname()    { return nickname; }
+        public String getSubmittedAt(){ return submittedAt; }
     }
 
     // ────────── 기존 로직(전처리, 연산자 개수 세기, 난수 생성 등) ──────────
