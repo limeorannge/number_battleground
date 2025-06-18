@@ -118,7 +118,7 @@ public class CalcService {
         String numberPart = symjaOutput.substring(start + 1, comma).trim();
         return numberPart;
     }
-    private static final String VALID_REGEX = "^(?:(?:tan)|\\d+|[+\\-*/()])+$";
+    private static final String VALID_REGEX = "^(?:(?:tan)|\\d+|[+\\-*/()\\s])+$";
     public static boolean isValidExpression(String expr) {
         return expr.matches(VALID_REGEX);
     }
