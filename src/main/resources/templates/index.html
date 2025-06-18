@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title>실시간 TeX 계산기 (Submit & History)</title>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    #site-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+    #site-guide {
+      font-size: 1.2rem;
+    }
+    #countdown {
+      font-size: 1rem;
+      text-align: right;
+    }
+    #daily-number {
+      font-size: 1.25rem;
+      margin: 1rem 0;
+      text-align: center;
+    }
+    #expression {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    #submit-button {
+      margin-top: 0.5rem;
+      padding: 0.4rem 1rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #result-box {
+      margin-top: 1rem;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+    }
+    #daily-info {
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      text-align: center;
+    }
+    #daily-info span {
+      font-weight: bold;
+    }
+    /* 제출 이력 표시 영역 */
+    #history {
+      margin-top: 1.5rem;
+      padding: 0.5rem;
+      border: 1px dashed #666;
+      background: #fafafa;
+    }
+    #history h3 {
+      margin-top: 0;
+    }
+    #history ul {
+      list-style: decimal inside;
+      padding-left: 1rem;
+    }
+    #history li {
+      margin: 0.25rem 0;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- 1) 상단: 사이트 제목 / 카운트다운 -->
+  <header>
+    <div id="site-title">Mathematics Battleground!</div>
+    <div id="countdown">---:--:--</div>
+  </header>
+  <div id="site-guide">1자리 숫자, Tan, 괄호, 사칙연산만 입력 가능합니다.</div>
+
+  <!-- 2) 오늘의 난수: 초기엔 “로드 중...” -->
+  <div id="daily-number">오늘의 난수: 로드 중...</div>
+
+  <!-- 3) 수식 입력란 + 제출 버튼 -->
+  <input
+    type="text"
+    id="expression"
+    name="expression"
+    placeholder="예: \\frac{1}{2} + \\sqrt{5}"
+    autocomplete="off"
+  />
+  <button id="submit-button">제출</button>
+
+  <!-- 4) 계산 결과 영역 -->
+  <div id="result-box">
+    <!-- 4-1) MathJax 한 줄 렌더링 -->
+    <div id="mathjax-render-single">아직 입력되지 않음</div>
+    <!-- 4-2) 오늘 난수 & 오차율 -->
+    <div id="daily-info">
+      <p>오늘의 난수: <span id="random-display">—</span></p>
+      <p>오차율(%)  : <span id="error-display">—</span></p>
+    </div>
+  </div>
+
+  <!-- 5) 제출 이력(History) 표시 -->
+  <div id="history">
+    <h3>오늘 제출된 수식 목록</h3>
+    <ul id="history-list">
+      <!-- JS에서 <li>태그를 만들어 삽입합니다 -->
+    </ul>
+  </div>
+
+  <script>
+    // (A) 서울 시간 now 얻기
+    function getSeoulNow() {
+      const now = new Date();
+      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+      return new Date(utc + 9 * 3600000);
+    }
+
+    // (B) 다음 자정까지 남은 시간 계산 & 표시
+    function updateCountdown() {
+      const seoulNow = getSeoulNow();
+      const year  = seoulNow.getFullYear();
+      const month = seoulNow.getMonth();
+      const date  = seoulNow.getDate();
+      const todayMidnightUTCms = Date.UTC(year, month, date, 0, 0, 0) - 9 * 3600000;
+      const nextMidnightUTCms = todayMidnightUTCms + 24 * 3600000;
+      const nowUTCms = seoulNow.getTime() - 9 * 3600000;
+      let diffMs = nextMidnightUTCms - nowUTCms;
+      if (diffMs < 0) diffMs = 0;
+
+      const hh = String(Math.floor(diffMs / 3600000)).padStart(2, "0");
+      diffMs %= 3600000;
+      const mm = String(Math.floor(diffMs / 60000)).padStart(2, "0");
+      diffMs %= 60000;
+      const ss = String(Math.floor(diffMs / 1000)).padStart(2, "0");
+
+      $("#countdown").text(`Next change in ${hh}:${mm}:${ss}`);
+    }
+
+    // (C) 페이지 로드 시, 빈 수식("")으로 /api/calc 호출 → 오늘 난수만 받아오기
+    function fetchDailyRandomOnLoad() {
+      $.ajax({
+        url: "/api/calc",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ expression: "" }),
+        success: function (data) {
+          $("#daily-number").text(`오늘의 난수: ${data.dailyRandom}`);
+          $("#random-display").text(data.dailyRandom);
+          $("#error-display").text("—");
+        },
+        error: function () {
+          $("#daily-number").text("오늘의 난수 로드 실패");
+          $("#random-display").text("—");
+          $("#error-display").text("—");
+        },
+      });
+    }
+
+    // (D) 수식이 입력될 때마다 실시간 계산 (기존 /api/calc 사용)
+    function bindRealtimeCalc() {
+      let debounceTimer = null;
+      $("#expression").on("input", function () {
+        const raw = $("#expression").val().trim();
+        if (debounceTimer) clearTimeout(debounceTimer);
+
+        if (raw === "") {
+          $("#mathjax-render-single").text("아직 입력되지 않음");
+          $("#random-display").text($("#random-display").text() || "—");
+          $("#error-display").text("—");
+          return;
+        }
+
+        debounceTimer = setTimeout(() => {
+          $.ajax({
+            url: "/api/calc",
+            method: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ expression: raw }),
+            success: function (data) {
+              const original = data.expression;
+              let symTeX     = data.symbolicTeX;
+              let numeric5   = data.numericResult;
+              const dailyRnd = data.dailyRandom;
+              const errRate  = data.errorRate;
+
+              // “오류” 문자열 처리: parseFloat 실패 시 모두 “오류”
+              const parsed = parseFloat(numeric5);
+              if (isNaN(parsed)) {
+                symTeX   = "오류";
+                numeric5 = "오류";
+              }
+
+              const tex = `$$ ${original} = ${symTeX} = ${numeric5} $$`;
+              $("#mathjax-render-single").text(tex);
+              MathJax.typesetPromise();
+
+              $("#daily-number").text(`오늘의 난수: ${dailyRnd}`);
+              $("#random-display").text(dailyRnd);
+              $("#error-display").text(errRate);
+            },
+            error: function () {
+              $("#mathjax-render-single").text("오류 발생");
+            },
+          });
+        }, 300);
+      });
+    }
+
+    // (E) 제출 버튼 클릭 → /api/submit 호출 → 오늘 제출 목록 갱신
+    function bindSubmitButton() {
+      $("#submit-button").on("click", function () {
+        const raw = $("#expression").val().trim();
+        if (raw === "") {
+          alert("수식을 입력한 후 제출하세요.");
+          return;
+        }
+        $.ajax({
+          url: "/api/submit",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ expression: raw }),
+          success: function (data) {
+            // data는 SubmissionDTO 객체 배열: [{expression, errorRate}, ...]
+            $("#history-list").empty();
+            data.forEach(function (item, index) {
+              const li = $("<li>").text(
+                (index + 1) + ". " + item.expression + "  — 오차율: " + item.errorRate
+              );
+              $("#history-list").append(li);
+            });
+          },
+          error: function () {
+            alert("제출 중 오류가 발생했습니다.");
+          },
+        });
+      });
+    }
+
+    // DOM이 준비되면 초기화
+    $(function () {
+      updateCountdown();
+      setInterval(updateCountdown, 1000);
+
+      fetchDailyRandomOnLoad();
+      bindRealtimeCalc();
+      bindSubmitButton();
+    });
+  </script>
+</body>
+</html>
