@@ -8,4 +8,5 @@ import java.util.List;
 public interface SubmissionRepository
         extends JpaRepository<SubmissionEntity, Long> {
     List<SubmissionEntity> findAllByCreatedDateOrderByPenalty(LocalDate date);
+    long deleteByCreatedDateBefore(LocalDate date);
 }

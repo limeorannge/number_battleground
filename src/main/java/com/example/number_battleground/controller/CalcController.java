@@ -27,7 +27,6 @@ public class CalcController {
         return calcService.submitExpression(expr, nickname);
     }
 
-    // ────────── 기존 “실시간 계산” 엔드포인트 (/api/calc) ──────────
     @PostMapping(
         path     = "/calc",
         consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -40,6 +39,4 @@ public class CalcController {
         }
         return calcService.evaluateExpression(rawExpr.trim());
     }
-
-    // ────────── 신규 엔드포인트: “제출” 기능 (/api/submit) ──────────
 }

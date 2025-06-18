@@ -34,11 +34,9 @@ public class CalcService {
     }
 
     public List<SubmissionDTO> submitExpression(String raw, String nickname) {
-        // 1) 계산 (기존 evaluateExpression에서 expression, errorRate, opCounts 리턴)
         CalcResponse cr = evaluateExpression(raw);
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-        // 2) errorRate 파싱 (e.g. "12.34%" → 0.1234)
         double errValue = 0.0;
         String errStr = cr.getErrorRate();
         if (errStr != null && errStr.endsWith("%")) {
@@ -49,20 +47,17 @@ public class CalcService {
                        .stream().map(this::toDTO).collect(Collectors.toList());
         }
 
-        // 4) 페널티 계산
         Map<String,Integer> opCounts = cr.getOperatorCounts();
         int totalOps           = opCounts.values().stream().mapToInt(i->i).sum();
         double opsPenalty      = totalOps * 10;
         double accuracyPenalty = Math.exp(errValue * 10);
         double totalPenalty    = opsPenalty + accuracyPenalty;
 
-        // 5) DB 저장
         SubmissionEntity ent = new SubmissionEntity(
             raw, errValue, totalOps, totalPenalty, today, nickname, now
         );
         repo.save(ent);
 
-        // 6) 오늘자 리더보드 조회 & DTO 변환
         return repo.findAllByCreatedDateOrderByPenalty(today)
                    .stream().map(this::toDTO).collect(Collectors.toList());
     }
@@ -74,14 +69,7 @@ public class CalcService {
         return new SubmissionDTO(e.getExpression(), pct, e.getPenalty(), e.getNickname(), ts);
     }
 
-
-    /**
-     * evaluateExpression:
-     *   - 입력된 raw 수식을 계산하여 CalcResponse 반환
-     *   - 기존 기능(수치 계산, 기호 계산, 연산자 개수, 난수, 오차율) 동일
-     */
     public static String extractBigRawDigits(String symjaOutput) {
-    // 1. 괄호 안에서 첫 번째 인자 추출
         int start = symjaOutput.indexOf('(');
         int comma = symjaOutput.indexOf(',');
         int E = symjaOutput.indexOf('E');
@@ -95,7 +83,6 @@ public class CalcService {
         numberPart = numberPart.replace(".", "");
         if(Integer.parseInt(exponentPart) >0){
             if(numberPart.length() <= Integer.parseInt(exponentPart)){
-                // 2-1. 지수 부분이 숫자 길이보다 크면, 0을 채워줌
                 int zeroCount = Integer.parseInt(exponentPart) - numberPart.length()+1;
                 StringBuilder sb = new StringBuilder(numberPart);
                 for(int i = 0; i < zeroCount; i++){
@@ -121,19 +108,15 @@ public class CalcService {
             }
             else numberPart = "0."+sb.toString() + numberPart.substring(0, 8);
         }
-        // 2. 소수점 제거
        
         return numberPart;
     }
     public static String extractSmallRawDigits(String symjaOutput) {
-    // 1. 괄호 안에서 첫 번째 인자 추출
         int start = symjaOutput.indexOf('(');
         int comma = symjaOutput.indexOf(',');
         if (start == -1 || comma == -1) return null;
 
         String numberPart = symjaOutput.substring(start + 1, comma).trim();
-
-        // 2. 소수점 제거
         return numberPart;
     }
     private static final String VALID_REGEX = "^(?:(?:tan)|\\d+|[+\\-*/()])+$";
@@ -151,7 +134,6 @@ public class CalcService {
             );
         }
 
-        // 한 자리 숫자 검증
         Pattern digitSeq = Pattern.compile("\\d+");
         Matcher matcher = digitSeq.matcher(raw);
         while (matcher.find()) {
@@ -223,8 +205,6 @@ public class CalcService {
         );
     }
 
-
-    // ────────── 내부 클래스: 저장용 Submission ──────────
     public static class SubmissionDTO {
         private final String expression;
         private final String errorRate;
@@ -246,7 +226,6 @@ public class CalcService {
         public String getSubmittedAt(){ return submittedAt; }
     }
 
-    // ────────── 기존 로직(전처리, 연산자 개수 세기, 난수 생성 등) ──────────
 
     private String preprocessLatex(String s) {
         if (s == null) return "";
@@ -300,7 +279,6 @@ public class CalcService {
         return (long) rnd.nextInt(1_000_000_000) + 1L;
     }
 
-    // ────────── 기존 CalcResponse ──────────
     public static class CalcResponse {
         private final String expression;
         private final String symbolicTeX;

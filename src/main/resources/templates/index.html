@@ -72,7 +72,7 @@
     #daily-info span {
       font-weight: bold;
     }
-    /* 제출 이력 표시 영역 */
+
     #history {
       margin-top: 1.5rem;
       padding: 0.5rem;
@@ -90,10 +90,22 @@
       margin: 0.25rem 0;
       font-size: 0.95rem;
     }
+    #history-header {
+      display: flex;        
+      align-items: center;   
+      justify-content: space-between; 
+      margin-bottom: 1rem;    
+    }
+    #history-header #penalty-info {
+      margin: 0;              
+      font-size: 0.9rem;
+      color: #666;
+      text-align : right;
+    }
   </style>
 </head>
 <body>
-  <!-- 1) 상단: 사이트 제목 / 카운트다운 -->
+
   <header>
     <div id="site-title">Mathematics Battleground!</div>
     <div id="countdown">---:--:--</div>
@@ -101,10 +113,10 @@
   <div id ="site-target">목표 숫자를 만들어보세요!</div>
   <div id="site-guide">1자리 숫자, Tan, 괄호, 사칙연산만 입력 가능합니다.</div>
 
-  <!-- 2) 오늘의 난수: 초기엔 “로드 중...” -->
+
   <div id="daily-number">오늘의 목표: 로드 중...</div>
 
-  <!-- 3) 수식 입력란 + 제출 버튼 -->
+
   <input
   type="text"
   id="nickname"
@@ -121,36 +133,30 @@
     autocomplete="off"
   />
   <button id="submit-button">제출</button>
-
-  <!-- 4) 계산 결과 영역 -->
   <div id="result-box">
     <div id="result-box-header">오늘의 목표 숫자를 만들어보세요!</div>
-    <!-- 4-1) MathJax 한 줄 렌더링 -->
     <div id="mathjax-render-single">아직 입력되지 않음</div>
-    <!-- 4-2) 오늘 난수 & 오차율 -->
     <div id="daily-info">
       <p>오늘의 목표 숫자: <span id="random-display">—</span></p>
       <p>오차율(%)  : <span id="error-display">—</span></p>
     </div>
   </div>
 
-  <!-- 5) 제출 이력(History) 표시 -->
   <div id="history">
+    <div id="history-header">
     <h3>오늘의 순위표</h3>
+    <p id="penalty-info">페널티 계산법 : 10*(활용한 연산 수, 괄호 포함)+exp(10*오차율)</p>
+    </div>
     <ul id="history-list">
-      <!-- JS에서 <li>태그를 만들어 삽입합니다 -->
     </ul>
   </div>
 
   <script>
-    // (A) 서울 시간 now 얻기
     function getSeoulNow() {
       const now = new Date();
       const utc = now.getTime() + now.getTimezoneOffset() * 60000;
       return new Date(utc + 9 * 3600000);
     }
-
-    // (B) 다음 자정까지 남은 시간 계산 & 표시
     function updateCountdown() {
       const seoulNow = getSeoulNow();
       const year  = seoulNow.getFullYear();
@@ -171,7 +177,6 @@
       $("#countdown").text(`Next change in ${hh}:${mm}:${ss}`);
     }
 
-    // (C) 페이지 로드 시, 빈 수식("")으로 /api/calc 호출 → 오늘 난수만 받아오기
     function fetchDailyRandomOnLoad() {
       $.ajax({
         url: "/api/calc",
@@ -179,19 +184,18 @@
         contentType: "application/json",
         data: JSON.stringify({ expression: "" }),
         success: function (data) {
-          $("#daily-number").text(`오늘의 난수: ${data.dailyRandom}`);
+          $("#daily-number").text(`오늘의 목표 숫자: ${data.dailyRandom}`);
           $("#random-display").text(data.dailyRandom);
           $("#error-display").text("—");
         },
         error: function () {
-          $("#daily-number").text("오늘의 난수 로드 실패");
+          $("#daily-number").text("오늘의 목표 로드 실패");
           $("#random-display").text("—");
           $("#error-display").text("—");
         },
       });
     }
 
-    // (D) 수식이 입력될 때마다 실시간 계산 (기존 /api/calc 사용)
     function bindRealtimeCalc() {
       let debounceTimer = null;
       $("#expression").on("input", function () {
@@ -218,7 +222,6 @@
               const dailyRnd = data.dailyRandom;
               const errRate  = data.errorRate;
 
-              // “오류” 문자열 처리: parseFloat 실패 시 모두 “오류”
               const parsed = parseFloat(numeric5);
              
 
@@ -238,7 +241,6 @@
       });
     }
 
-    // (E) 제출 버튼 클릭 → /api/submit 호출 → 오늘 제출 목록 갱신
      function bindSubmitButton() {
     $("#submit-button").on("click", function () {
       const raw     = $("#expression").val().trim();
@@ -263,7 +265,7 @@
             const penText = parseFloat(item.penalty).toFixed(2);
             const li = $("<li>").text(
               "닉네임: " + item.nickname
-              + ", 수식:" + item.expression
+              + ", 수식: " + item.expression
               + " — 오차율: " + item.errorRate
               + ", 페널티: " + penText
               + ", 제출 시간[" + item.submittedAt + "] "
@@ -278,7 +280,6 @@
     });
   }
 
-    // DOM이 준비되면 초기화
     $(function () {
       updateCountdown();
       setInterval(updateCountdown, 1000);
