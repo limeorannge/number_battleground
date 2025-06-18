@@ -1,28 +1,74 @@
 package com.example.number_battleground.service;
 
+import com.example.number_battleground.controller.CalcController;
+import com.example.number_battleground.entity.SubmissionEntity;
+import com.example.number_battleground.repository.SubmissionRepository;
+import com.example.number_battleground.service.CalcService.SubmissionDTO;
+
 import org.matheclipse.core.eval.ExprEvaluator;
 import org.matheclipse.core.interfaces.IExpr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.example.number_battleground.controller.CalcController;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory; 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.io.IOException;
-import java.math.BigDecimal;
+import java.util.Random;
+
 
 @Service
 public class CalcService {
     private static final Logger log = LoggerFactory.getLogger(CalcController.class);
-    // ────────── 내부 메모리 저장소 ──────────
-    // Submission(수식 + 오차율 + 날짜) 목록을 메모리에 보관
-    private final List<Submission> submissions = new ArrayList<>();
+    private final SubmissionRepository repo;
+
+    public CalcService(SubmissionRepository repo) {
+        this.repo = repo;
+    }
+
+    public List<SubmissionDTO> submitExpression(String raw) {
+        // 1) 계산 (기존 evaluateExpression에서 expression, errorRate, opCounts 리턴)
+        CalcResponse cr = evaluateExpression(raw);
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        // 2) errorRate 파싱 (e.g. "12.34%" → 0.1234)
+        double errValue = 0.0;
+        String errStr = cr.getErrorRate();
+        if (errStr != null && errStr.endsWith("%")) {
+            errValue = Double.parseDouble(errStr.replace("%","")) / 100.0;
+        }
+        else{
+            return repo.findAllByCreatedDateOrderByPenalty(today)
+                       .stream().map(this::toDTO).collect(Collectors.toList());
+        }
+
+        // 4) 페널티 계산
+        Map<String,Integer> opCounts = cr.getOperatorCounts();
+        int totalOps           = opCounts.values().stream().mapToInt(i->i).sum();
+        double opsPenalty      = totalOps * 10;
+        double accuracyPenalty = Math.exp(errValue * 10);
+        double totalPenalty    = opsPenalty + accuracyPenalty;
+
+        // 5) DB 저장
+        SubmissionEntity ent = new SubmissionEntity(
+            raw, errValue, totalOps, totalPenalty, today
+        );
+        repo.save(ent);
+
+        // 6) 오늘자 리더보드 조회 & DTO 변환
+        return repo.findAllByCreatedDateOrderByPenalty(today)
+                   .stream().map(this::toDTO).collect(Collectors.toList());
+    }
+
+    private SubmissionDTO toDTO(SubmissionEntity e) {
+        String pct = String.format("%.2f%%", e.getErrorRate() * 100);
+        return new SubmissionDTO(e.getExpression(), pct, e.getPenalty());
+    }
+
 
     /**
      * evaluateExpression:
@@ -65,7 +111,10 @@ public class CalcService {
             for(int i=1; i< Math.abs(Integer.parseInt(exponentPart)); i++){
                 sb.append("0");
             }
-            numberPart = "0."+sb.toString() + numberPart.substring(0, 8);
+            if(numberPart.charAt(0)=='-'){
+                numberPart = "-0."+sb.toString() + numberPart.substring(1, 8);
+            }
+            else numberPart = "0."+sb.toString() + numberPart.substring(0, 8);
         }
         // 2. 소수점 제거
        
@@ -81,6 +130,10 @@ public class CalcService {
 
         // 2. 소수점 제거
         return numberPart;
+    }
+    private static final String VALID_REGEX = "^(?:(?:tan)|\\d+|[+\\-*/()])+$";
+    public static boolean isValidExpression(String expr) {
+        return expr.matches(VALID_REGEX);
     }
     public CalcResponse evaluateExpression(String raw) {
         long dailyRandLong = generateDailyRandom();
@@ -100,14 +153,26 @@ public class CalcService {
             String numToken = matcher.group();
             if (numToken.length() > 1) {
                 return new CalcResponse(
-                    raw, "두 자리 수 입력 금지", "두 자리 수 입력 금지",
+                    raw, "두 \\,자리 \\,수 \\,입력 \\,금지", "두\\, 자리\\, 수\\, 입력\\, 금지",
                     dailyRandLong, "—", opCounts
                 );
             }
         }
         if (raw.contains(".")) {
             return new CalcResponse(
-                raw, "두 자리 수 입력 금지", "두 자리 수 입력 금지",
+                raw, "소수점 \\,입력 \\,금지" , "소수점 \\,입력 \\,금지",
+                dailyRandLong, "—", opCounts
+            );
+        }
+        if (raw.contains(".")) {
+            return new CalcResponse(
+                raw, "소수점 \\,입력 \\,금지" , "소수점 \\,입력 \\,금지",
+                dailyRandLong, "—", opCounts
+            );
+        }
+        if(!isValidExpression(raw)) {
+            return new CalcResponse(
+                raw, "허용되지 \\,않은 \\,수식 \\,형식", "허용되지 \\,않은 \\,수식 \\,형식",
                 dailyRandLong, "—", opCounts
             );
         }
@@ -135,7 +200,7 @@ public class CalcService {
             numericValue = Double.parseDouble(numeric6);
         } catch (Exception e) {
             log.error("{}", e);
-            symbolicTeX  = "오류: 계산 불가능";
+            symbolicTeX  = "오류: 수식 \\,입력 \\,오류";
             numeric5     = "오류";
             numericValue = Double.NaN;
         }
@@ -153,85 +218,18 @@ public class CalcService {
         );
     }
 
-    /**
-     * submitExpression:
-     *   - 사용자가 “제출” 버튼을 눌러 보낸 수식 raw를 받아서
-     *     1) evaluateExpression(...) 호출하여 오차율 계산
-     *     2) 오늘 날짜(LocalDate, 서울)와 함께 Submission 객체를 메모리에 저장
-     *     3) 그날 제출된 모든 Submission 목록을 SubmissionDTO 형태로 반환
-     */
-    public List<SubmissionDTO> submitExpression(String raw) {
-        // 1) 계산 로직 수행
-        CalcResponse cr = evaluateExpression(raw);
-        String errorRateStr = cr.getErrorRate();
-        Map<String,Integer> opCounts = cr.getOperatorCounts();
-
-        // 2) operator 개수 합산
-        int totalOps = opCounts.values().stream().mapToInt(Integer::intValue).sum();
-        double opsPenalty = totalOps * 10;
-
-        // 3) errorRate 문자열 파싱 ("12.34%" → 0.1234)
-        double errValue = 0.0;
-        if (errorRateStr != null && errorRateStr.endsWith("%")) {
-            try {
-                errValue = Double.parseDouble(errorRateStr.replace("%", "")) / 100.0;
-            } catch (NumberFormatException ex) {
-                // 파싱 실패 시 0으로 간주
-            }
-        }
-        double accuracyPenalty = Math.exp(errValue * 10);
-        double totalPenalty = opsPenalty + accuracyPenalty;
-
-        // 4) 오늘 날짜 기준 Submission 저장
-        LocalDate todaySeoul = LocalDate.now(ZoneId.of("Asia/Seoul"));
-        Submission sub = new Submission(raw, errorRateStr, todaySeoul, totalPenalty);
-        synchronized (submissions) {
-            submissions.add(sub);
-        }
-
-        // 5) 오늘 날짜 필터 후 penalty 기준 정렬하여 DTO 생성
-        List<SubmissionDTO> todayList;
-        synchronized (submissions) {
-            todayList = submissions.stream()
-                .filter(s -> s.getDate().equals(todaySeoul))
-                .sorted(Comparator.comparingDouble(Submission::getPenalty))
-                .map(s -> new SubmissionDTO(s.getExpression(), s.getErrorRate(), s.getPenalty()))
-                .collect(Collectors.toList());
-        }
-
-        return todayList;
-    }
 
     // ────────── 내부 클래스: 저장용 Submission ──────────
-    private static class Submission {
-        private final String expression;
-        private final String errorRate;
-        private final LocalDate date;
-        private final double penalty;
-
-        public Submission(String expression, String errorRate, LocalDate date, double penalty) {
-            this.expression = expression;
-            this.errorRate = errorRate;
-            this.date = date;
-            this.penalty = penalty;
-        }
-        public String getExpression() { return expression; }
-        public String getErrorRate()  { return errorRate; }
-        public LocalDate getDate()    { return date; }
-        public double getPenalty()    { return penalty; }
-    }
-
-    // ────────── 외부 응답용 DTO ──────────
     public static class SubmissionDTO {
         private final String expression;
         private final String errorRate;
         private final double penalty;
-
-        public SubmissionDTO(String expression, String errorRate, double penalty) {
-            this.expression = expression;
-            this.errorRate = errorRate;
-            this.penalty = penalty;
+        public SubmissionDTO(String expr, String err, double pen) {
+            this.expression = expr;
+            this.errorRate  = err;
+            this.penalty    = pen;
         }
+        // getters
         public String getExpression() { return expression; }
         public String getErrorRate()  { return errorRate; }
         public double getPenalty()    { return penalty; }

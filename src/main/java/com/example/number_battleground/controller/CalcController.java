@@ -20,6 +20,11 @@ public class CalcController {
     public CalcController(CalcService calcService) {
         this.calcService = calcService;
     }
+    @PostMapping("/submit")
+    public List<SubmissionDTO> submit(@RequestBody Map<String,String> payload) {
+        String expr = payload.get("expression");
+        return calcService.submitExpression(expr);
+    }
 
     // ────────── 기존 “실시간 계산” 엔드포인트 (/api/calc) ──────────
     @PostMapping(
@@ -36,17 +41,4 @@ public class CalcController {
     }
 
     // ────────── 신규 엔드포인트: “제출” 기능 (/api/submit) ──────────
-    @PostMapping(
-        path     = "/submit",
-        consumes = MediaType.APPLICATION_JSON_VALUE,
-        produces = MediaType.APPLICATION_JSON_VALUE
-    )
-    public List<SubmissionDTO> submit(@RequestBody Map<String, String> payload) {
-        String rawExpr = payload.get("expression");
-        if (rawExpr == null) {
-            rawExpr = "";
-        }
-        // service.submitExpression → 오늘 날짜 기준으로 목록을 반환
-        return calcService.submitExpression(rawExpr.trim());
-    }
 }

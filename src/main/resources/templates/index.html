@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8" />
-  <title>실시간 TeX 계산기 (Submit & History)</title>
+  <title>Mathematics Battleground</title>
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <style>
@@ -22,6 +22,10 @@
       font-size: 1.5rem;
       font-weight: bold;
     }
+    #site-target {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
     #site-guide {
       font-size: 1.2rem;
     }
@@ -33,6 +37,14 @@
       font-size: 1.25rem;
       margin: 1rem 0;
       text-align: center;
+    }
+    #result-box-header {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    #mathjax-render-single {
+      text-align : center;
     }
     #expression {
       width: 100%;
@@ -86,35 +98,37 @@
     <div id="site-title">Mathematics Battleground!</div>
     <div id="countdown">---:--:--</div>
   </header>
+  <div id ="site-target">목표 숫자를 만들어보세요!</div>
   <div id="site-guide">1자리 숫자, Tan, 괄호, 사칙연산만 입력 가능합니다.</div>
 
   <!-- 2) 오늘의 난수: 초기엔 “로드 중...” -->
-  <div id="daily-number">오늘의 난수: 로드 중...</div>
+  <div id="daily-number">오늘의 목표: 로드 중...</div>
 
   <!-- 3) 수식 입력란 + 제출 버튼 -->
   <input
     type="text"
     id="expression"
     name="expression"
-    placeholder="예: \\frac{1}{2} + \\sqrt{5}"
+    placeholder="예: tan(5/4)*5*7*9+3"
     autocomplete="off"
   />
   <button id="submit-button">제출</button>
 
   <!-- 4) 계산 결과 영역 -->
   <div id="result-box">
+    <div id="result-box-header">오늘의 목표 숫자를 만들어보세요!</div>
     <!-- 4-1) MathJax 한 줄 렌더링 -->
     <div id="mathjax-render-single">아직 입력되지 않음</div>
     <!-- 4-2) 오늘 난수 & 오차율 -->
     <div id="daily-info">
-      <p>오늘의 난수: <span id="random-display">—</span></p>
+      <p>오늘의 목표 숫자: <span id="random-display">—</span></p>
       <p>오차율(%)  : <span id="error-display">—</span></p>
     </div>
   </div>
 
   <!-- 5) 제출 이력(History) 표시 -->
   <div id="history">
-    <h3>오늘 제출된 수식 목록</h3>
+    <h3>오늘의 순위표</h3>
     <ul id="history-list">
       <!-- JS에서 <li>태그를 만들어 삽입합니다 -->
     </ul>
@@ -198,10 +212,7 @@
 
               // “오류” 문자열 처리: parseFloat 실패 시 모두 “오류”
               const parsed = parseFloat(numeric5);
-              if (isNaN(parsed)) {
-                symTeX   = "오류";
-                numeric5 = "오류";
-              }
+             
 
               const tex = `$$ ${original} = ${symTeX} = ${numeric5} $$`;
               $("#mathjax-render-single").text(tex);
